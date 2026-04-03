@@ -1,4 +1,4 @@
-# render.yaml (обновленная версия с БД)
+# render.yaml
 services:
   - type: web
     name: lvlup-irl-web
@@ -6,6 +6,7 @@ services:
     plan: free
     buildCommand: npm run build
     startCommand: npm start
+    preDeployCommand: npx prisma migrate deploy  # 👈 КЛЮЧЕВОЕ ДОБАВЛЕНИЕ
     envVars:
       - key: DATABASE_URL
         fromDatabase:
