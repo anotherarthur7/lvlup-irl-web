@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 const icons = ['🇬🇧', '💪', '💻', '🎸', '🏃', '📚', '🎨', '🧘', '⚽', '🎹'];
 const colors = [0x9B7BFF, 0x4CAF50, 0xFF5722, 0xFFC107, 0x2196F3, 0xE91E63];
@@ -15,8 +16,15 @@ export default function NewActivityPage() {
   const [color, setColor] = useState(colors[0]);
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+    
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -27,16 +35,19 @@ export default function NewActivityPage() {
     };
     checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.push('/');
-      } else {
-        setUserId(session.user.id);
+    // Исправлено: добавлены типы для параметров
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (!session) {
+          router.push('/');
+        } else {
+          setUserId(session.user.id);
+        }
       }
-    });
+    );
 
     return () => subscription.unsubscribe();
-  }, [router]);
+  }, [router, isClient]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,7 +66,7 @@ export default function NewActivityPage() {
           icon,
           color,
           is_active: true,
-          user_id: userId  // ← явно указываем user_id
+          user_id: userId
         });
 
       if (error) throw error;
@@ -68,6 +79,10 @@ export default function NewActivityPage() {
       setLoading(false);
     }
   };
+
+  if (!isClient) {
+    return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Загрузка...</div>;
+  }
 
   return (
     <main className="min-h-screen bg-gray-900">

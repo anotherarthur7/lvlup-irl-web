@@ -1,14 +1,32 @@
 // lib/supabaseClient.ts
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-// Создаем клиент с правильными настройками
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,  // Сохранять сессию в localStorage
-    autoRefreshToken: true, // Автоматически обновлять токен
-    detectSessionInUrl: true // Обнаруживать сессию в URL (для подтверждения email)
+// Функция для получения переменных окружения с дефолтными значениями
+const getSupabaseUrl = () => {
+  if (typeof window === 'undefined') {
+    // На сервере используем переменные окружения напрямую
+    return process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   }
-})
+  return process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+}
+
+const getSupabaseAnonKey = () => {
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  }
+  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+}
+
+const supabaseUrl = getSupabaseUrl();
+const supabaseAnonKey = getSupabaseAnonKey();
+
+// Только проверяем в браузере
+if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
+  console.error('Missing Supabase environment variables');
+  // Не выбрасываем ошибку, а логируем
+}
+
+// Экспортируем клиент (на сервере может быть null)
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null as any;

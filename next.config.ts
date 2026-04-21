@@ -2,10 +2,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  // НЕ используй output: 'export' если нужны API маршруты
-  images: {
-    unoptimized: true,
-  },
+  // Удали эту строку или закомментируй
+  // output: 'standalone',
 };
 
 export default nextConfig;

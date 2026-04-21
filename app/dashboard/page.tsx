@@ -1,9 +1,11 @@
+// app/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { Activity, TimeEntry } from '@/lib/types';
 
 export default function DashboardPage() {
@@ -13,21 +15,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.replace('/'); // Перенаправляем неавторизованных пользователей
-      } else {
-        setUserId(session.user.id);
-        setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
-      }
-      setLoading(false); // Важно: загрузка закончена в любом случае
-    };
-    checkSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
         router.replace('/');
       } else {
@@ -35,21 +33,34 @@ export default function DashboardPage() {
         setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
         setLoading(false);
       }
-    });
+    };
+    checkSession();
+
+    // Исправлено: добавлены типы для параметров
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: AuthChangeEvent, session: Session | null) => {
+        if (!session) {
+          router.replace('/');
+        } else {
+          setUserId(session.user.id);
+          setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
+          setLoading(false);
+        }
+      }
+    );
 
     return () => subscription.unsubscribe();
-  }, [router]);
+  }, [router, isClient]);
 
-  // Загружаем данные только когда есть userId
+  // Загружаем данные только когда есть userId и isClient
   useEffect(() => {
-    if (userId) {
+    if (userId && isClient) {
       fetchData();
     }
-  }, [userId]);
+  }, [userId, isClient]);
 
   const fetchData = async () => {
     try {
-      // Загружаем активности
       const { data: activitiesData, error: activitiesError } = await supabase
         .from('activities')
         .select('*')
@@ -58,7 +69,6 @@ export default function DashboardPage() {
 
       if (activitiesError) throw activitiesError;
 
-      // Загружаем записи за сегодня
       const today = new Date().toISOString().split('T')[0];
       const { data: entriesData, error: entriesError } = await supabase
         .from('time_entries')
@@ -93,7 +103,7 @@ export default function DashboardPage() {
         });
 
       if (error) throw error;
-      await fetchData(); // Ждем обновления данных
+      await fetchData();
     } catch (error) {
       console.error('Error adding time entry:', error);
       alert('Не удалось добавить запись');
@@ -109,7 +119,6 @@ export default function DashboardPage() {
   const hours = Math.floor(todayTotal / 60);
   const minutes = todayTotal % 60;
 
-  // Показываем индикатор загрузки, пока идет проверка сессии
   if (loading) {
     return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Загрузка...</div>;
   }
@@ -132,7 +141,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Быстрое добавление */}
         <div className="bg-gray-800 rounded-xl shadow p-6 mb-6 border border-gray-700">
           <h2 className="font-semibold text-white text-lg mb-4">Быстрое добавление</h2>
           <div className="grid grid-cols-4 gap-4">
@@ -159,7 +167,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Сегодня */}
         <div className="bg-gray-800 rounded-xl shadow p-6 border border-gray-700">
           <div className="flex justify-between items-center mb-4">
             <h2 className="font-semibold text-white text-lg">Сегодня</h2>
