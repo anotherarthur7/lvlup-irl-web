@@ -1,4 +1,3 @@
-// app/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -13,41 +12,44 @@ export default function DashboardPage() {
   const [todayEntries, setTodayEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
-  const [userId, setUserId] = useState<string | null>(null); // ← добавить
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Проверяем сессию
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.push('/');
+        router.replace('/'); // Перенаправляем неавторизованных пользователей
       } else {
         setUserId(session.user.id);
         setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
-        fetchData();
       }
+      setLoading(false); // Важно: загрузка закончена в любом случае
     };
     checkSession();
 
-    // Подписываемся на изменения сессии
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
-        router.push('/');
+        router.replace('/');
       } else {
         setUserId(session.user.id);
         setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
-        fetchData();
+        setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [router]);
+
+  // Загружаем данные только когда есть userId
+  useEffect(() => {
+    if (userId) {
+      fetchData();
+    }
+  }, [userId]);
 
   const fetchData = async () => {
-    if (!userId) return; // Ждем пока userId загрузится
-    
     try {
-      // Загружаем активности текущего пользователя
+      // Загружаем активности
       const { data: activitiesData, error: activitiesError } = await supabase
         .from('activities')
         .select('*')
@@ -70,8 +72,6 @@ export default function DashboardPage() {
       setTodayEntries(entriesData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -80,22 +80,20 @@ export default function DashboardPage() {
       alert('Пользователь не авторизован');
       return;
     }
-    
     try {
       const today = new Date().toISOString().split('T')[0];
       const { error } = await supabase
         .from('time_entries')
         .insert({
           activity_id: activityId,
-          user_id: userId,  // ← теперь userId определен
+          user_id: userId,
           duration,
           date: today,
           note: 'Быстрое добавление',
         });
 
       if (error) throw error;
-      
-      fetchData(); // Обновляем данные
+      await fetchData(); // Ждем обновления данных
     } catch (error) {
       console.error('Error adding time entry:', error);
       alert('Не удалось добавить запись');
@@ -111,6 +109,7 @@ export default function DashboardPage() {
   const hours = Math.floor(todayTotal / 60);
   const minutes = todayTotal % 60;
 
+  // Показываем индикатор загрузки, пока идет проверка сессии
   if (loading) {
     return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Загрузка...</div>;
   }
