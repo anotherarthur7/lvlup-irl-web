@@ -15,57 +15,44 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [userId, setUserId] = useState<string | null>(null);
-  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isClient) return;
-
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace('/');
-        return;
-      }
-      
-      setUserId(session.user.id);
-      setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
-      
-      // Проверяем верификацию через API
-      try {
-        const verifyResponse = await fetch(`/api/check-verification?userId=${session.user.id}`);
-        const verifyData = await verifyResponse.json();
+      } else {
+        setUserId(session.user.id);
+        setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
         
-        if (!verifyData.verified) {
+        // Проверяем подтверждение email через Supabase
+        if (!session.user.confirmed_at) {
           router.replace('/verify-pending');
           return;
         }
-      } catch (err) {
-        console.error('Verification check failed:', err);
+        
+        setLoading(false);
       }
-      
-      setLoading(false);
     };
     
     checkSession();
 
+    // Исправлено: добавлены типы для параметров
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event: AuthChangeEvent, session: Session | null) => {
         if (!session) {
           router.replace('/');
+        } else if (!session.user.confirmed_at) {
+          router.replace('/verify-pending');
         } else {
           setUserId(session.user.id);
           setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
-          setLoading(false);
         }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [router, isClient]);
+  }, [router]);
 
   // Загружаем данные только когда есть userId
   useEffect(() => {

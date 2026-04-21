@@ -5,13 +5,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-// Генерация случайного токена (без crypto)
-const generateVerificationToken = () => {
-  return Math.random().toString(36).substring(2, 15) + 
-         Math.random().toString(36).substring(2, 15) +
-         Date.now().toString(36);
-};
-
 export default function LandingPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -40,7 +33,7 @@ export default function LandingPage() {
         router.push('/dashboard');
       }
     } else {
-      // Регистрация
+      // Регистрация — только вызов Supabase, ничего лишнего
       const { error, data } = await supabase.auth.signUp({
         email,
         password,
@@ -51,52 +44,8 @@ export default function LandingPage() {
       
       if (error) {
         setError(error.message);
-      } else if (data.user) {
-        // Генерируем токен верификации
-        const verificationToken = generateVerificationToken();
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 24);
-
-        // Сохраняем токен в профиль через API (не напрямую в клиенте!)
-        const profileResponse = await fetch('/api/update-profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: data.user.id,
-            verificationToken,
-            expiresAt: expiresAt.toISOString(),
-          }),
-        });
-
-        if (profileResponse.ok) {
-          // Отправляем письмо с подтверждением
-          const verificationLink = `${window.location.origin}/api/verify?token=${verificationToken}&email=${encodeURIComponent(email)}`;
-          
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: email,
-              subject: 'Подтверждение email — LVLUP-IRL',
-              html: `
-                <div style="font-family: Arial, sans-serif; max-width: 600px;">
-                  <h2 style="color: #9B7BFF;">Подтверждение email</h2>
-                  <p>Спасибо за регистрацию в LVLUP-IRL!</p>
-                  <p>Для подтверждения email нажмите на кнопку ниже:</p>
-                  <a href="${verificationLink}" style="display: inline-block; padding: 12px 24px; background-color: #9B7BFF; color: white; text-decoration: none; border-radius: 8px;">Подтвердить email</a>
-                  <p style="margin-top: 20px; color: #666;">Ссылка действительна 24 часа.</p>
-                </div>
-              `,
-            }),
-          });
-        }
-
-        setMessage('Регистрация успешна! Пожалуйста, подтвердите email. Ссылка отправлена на вашу почту.');
-        
-        // Не логиним автоматически, ждем подтверждения
-        setTimeout(() => {
-          router.push('/verify-pending');
-        }, 3000);
+      } else {
+        setMessage('Регистрация успешна! Проверьте почту для подтверждения email.');
       }
     }
     setLoading(false);
