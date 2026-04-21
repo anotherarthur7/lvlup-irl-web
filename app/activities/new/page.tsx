@@ -1,7 +1,7 @@
 // app/activities/new/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -14,9 +14,37 @@ export default function NewActivityPage() {
   const [icon, setIcon] = useState(icons[0]);
   const [color, setColor] = useState(colors[0]);
   const [loading, setLoading] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push('/');
+      } else {
+        setUserId(session.user.id);
+      }
+    };
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        router.push('/');
+      } else {
+        setUserId(session.user.id);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!userId) {
+      alert('Пользователь не авторизован');
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -27,6 +55,7 @@ export default function NewActivityPage() {
           icon,
           color,
           is_active: true,
+          user_id: userId  // ← явно указываем user_id
         });
 
       if (error) throw error;
@@ -89,7 +118,7 @@ export default function NewActivityPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700"
+              className="flex-1 bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
             >
               {loading ? 'Создание...' : 'Сохранить'}
             </button>
