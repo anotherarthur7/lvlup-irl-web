@@ -5,6 +5,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
+// Генерация случайного токена (без crypto)
+const generateVerificationToken = () => {
+  return Math.random().toString(36).substring(2, 15) + 
+         Math.random().toString(36).substring(2, 15) +
+         Date.now().toString(36);
+};
+
 export default function LandingPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -13,14 +20,16 @@ export default function LandingPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setMessage(null);
 
     if (isLogin) {
-      // Вход существующего пользователя
+      // Вход
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -31,7 +40,7 @@ export default function LandingPage() {
         router.push('/dashboard');
       }
     } else {
-      // Регистрация нового пользователя
+      // Регистрация
       const { error, data } = await supabase.auth.signUp({
         email,
         password,
@@ -39,19 +48,55 @@ export default function LandingPage() {
           data: { name: name || email.split('@')[0] },
         },
       });
+      
       if (error) {
         setError(error.message);
-      } else {
-        // После регистрации сразу логинимся
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
+      } else if (data.user) {
+        // Генерируем токен верификации
+        const verificationToken = generateVerificationToken();
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 24);
+
+        // Сохраняем токен в профиль через API (не напрямую в клиенте!)
+        const profileResponse = await fetch('/api/update-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: data.user.id,
+            verificationToken,
+            expiresAt: expiresAt.toISOString(),
+          }),
         });
-        if (signInError) {
-          setError(signInError.message);
-        } else {
-          router.push('/dashboard');
+
+        if (profileResponse.ok) {
+          // Отправляем письмо с подтверждением
+          const verificationLink = `${window.location.origin}/api/verify?token=${verificationToken}&email=${encodeURIComponent(email)}`;
+          
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: email,
+              subject: 'Подтверждение email — LVLUP-IRL',
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px;">
+                  <h2 style="color: #9B7BFF;">Подтверждение email</h2>
+                  <p>Спасибо за регистрацию в LVLUP-IRL!</p>
+                  <p>Для подтверждения email нажмите на кнопку ниже:</p>
+                  <a href="${verificationLink}" style="display: inline-block; padding: 12px 24px; background-color: #9B7BFF; color: white; text-decoration: none; border-radius: 8px;">Подтвердить email</a>
+                  <p style="margin-top: 20px; color: #666;">Ссылка действительна 24 часа.</p>
+                </div>
+              `,
+            }),
+          });
         }
+
+        setMessage('Регистрация успешна! Пожалуйста, подтвердите email. Ссылка отправлена на вашу почту.');
+        
+        // Не логиним автоматически, ждем подтверждения
+        setTimeout(() => {
+          router.push('/verify-pending');
+        }, 3000);
       }
     }
     setLoading(false);
@@ -108,6 +153,7 @@ export default function LandingPage() {
               required
             />
             {error && <p className="text-red-400 text-sm">{error}</p>}
+            {message && <p className="text-green-400 text-sm">{message}</p>}
             <button
               type="submit"
               disabled={loading}

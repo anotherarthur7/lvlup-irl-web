@@ -28,15 +28,30 @@ export default function DashboardPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace('/');
-      } else {
-        setUserId(session.user.id);
-        setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
-        setLoading(false);
+        return;
       }
+      
+      setUserId(session.user.id);
+      setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
+      
+      // Проверяем верификацию через API
+      try {
+        const verifyResponse = await fetch(`/api/check-verification?userId=${session.user.id}`);
+        const verifyData = await verifyResponse.json();
+        
+        if (!verifyData.verified) {
+          router.replace('/verify-pending');
+          return;
+        }
+      } catch (err) {
+        console.error('Verification check failed:', err);
+      }
+      
+      setLoading(false);
     };
+    
     checkSession();
 
-    // Исправлено: добавлены типы для параметров
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event: AuthChangeEvent, session: Session | null) => {
         if (!session) {
@@ -52,12 +67,12 @@ export default function DashboardPage() {
     return () => subscription.unsubscribe();
   }, [router, isClient]);
 
-  // Загружаем данные только когда есть userId и isClient
+  // Загружаем данные только когда есть userId
   useEffect(() => {
-    if (userId && isClient) {
+    if (userId) {
       fetchData();
     }
-  }, [userId, isClient]);
+  }, [userId]);
 
   const fetchData = async () => {
     try {
