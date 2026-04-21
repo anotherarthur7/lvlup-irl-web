@@ -3,16 +3,58 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function LandingPage() {
   const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleStart = () => {
-    if (name.trim()) {
-      localStorage.setItem('userName', name);
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    if (isLogin) {
+      // Вход существующего пользователя
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) {
+        setError(error.message);
+      } else {
+        router.push('/dashboard');
+      }
+    } else {
+      // Регистрация нового пользователя
+      const { error, data } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name: name || email.split('@')[0] },
+        },
+      });
+      if (error) {
+        setError(error.message);
+      } else {
+        // После регистрации сразу логинимся
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (signInError) {
+          setError(signInError.message);
+        } else {
+          router.push('/dashboard');
+        }
+      }
     }
-    router.push('/dashboard');
+    setLoading(false);
   };
 
   return (
@@ -23,17 +65,57 @@ export default function LandingPage() {
           <p className="text-xl text-gray-300">Трекер времени для саморазвития. Как в Steam, но для реальной жизни</p>
         </div>
 
-        <div className="bg-gray-800 rounded-2xl shadow-xl p-8 mb-12 border border-gray-700">
-          <div className="grid md:grid-cols-3 gap-8 text-center mb-8">
-            <div><div className="text-4xl mb-3">🎯</div><h3 className="font-semibold text-gray-200 mb-2">1 клик</h3><p className="text-gray-400 text-sm">Добавляй время в одно касание</p></div>
-            <div><div className="text-4xl mb-3">📊</div><h3 className="font-semibold text-gray-200 mb-2">Статистика</h3><p className="text-gray-400 text-sm">Следи за прогрессом</p></div>
-            <div><div className="text-4xl mb-3">🎮</div><h3 className="font-semibold text-gray-200 mb-2">Геймификация</h3><p className="text-gray-400 text-sm">Мотивация как в играх</p></div>
+        <div className="bg-gray-800 rounded-2xl shadow-xl p-8 mb-12 border border-gray-700 max-w-md mx-auto">
+          <div className="flex justify-center gap-4 mb-6">
+            <button
+              onClick={() => setIsLogin(true)}
+              className={`px-4 py-2 rounded-lg ${isLogin ? 'bg-purple-600 text-white' : 'text-gray-400'}`}
+            >
+              Вход
+            </button>
+            <button
+              onClick={() => setIsLogin(false)}
+              className={`px-4 py-2 rounded-lg ${!isLogin ? 'bg-purple-600 text-white' : 'text-gray-400'}`}
+            >
+              Регистрация
+            </button>
           </div>
 
-          <div className="max-w-md mx-auto">
-            <input type="text" placeholder="Как к тебе обращаться?" className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-purple-500 placeholder-gray-400" value={name} onChange={(e) => setName(e.target.value)} />
-            <button onClick={handleStart} className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition">Начать трекинг</button>
-          </div>
+          <form onSubmit={handleAuth} className="space-y-4">
+            {!isLogin && (
+              <input
+                type="text"
+                placeholder="Твоё имя"
+                className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            )}
+            <input
+              type="email"
+              placeholder="Email"
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <input
+              type="password"
+              placeholder="Пароль"
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
+            >
+              {loading ? 'Загрузка...' : (isLogin ? 'Войти' : 'Зарегистрироваться')}
+            </button>
+          </form>
         </div>
       </div>
     </main>
