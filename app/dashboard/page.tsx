@@ -13,26 +13,28 @@ export default function DashboardPage() {
   const [todayEntries, setTodayEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
-  const [session, setSession] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null); // ← добавить
 
   useEffect(() => {
     // Проверяем сессию
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.push('/');
       } else {
-        setSession(session);
+        setUserId(session.user.id);
         setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
         fetchData();
       }
-    });
+    };
+    checkSession();
 
     // Подписываемся на изменения сессии
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
         router.push('/');
       } else {
-        setSession(session);
+        setUserId(session.user.id);
         setUserName(session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Пользователь');
         fetchData();
       }
@@ -42,6 +44,8 @@ export default function DashboardPage() {
   }, []);
 
   const fetchData = async () => {
+    if (!userId) return; // Ждем пока userId загрузится
+    
     try {
       // Загружаем активности текущего пользователя
       const { data: activitiesData, error: activitiesError } = await supabase
@@ -72,12 +76,18 @@ export default function DashboardPage() {
   };
 
   const addTimeEntry = async (activityId: string, duration: number) => {
+    if (!userId) {
+      alert('Пользователь не авторизован');
+      return;
+    }
+    
     try {
       const today = new Date().toISOString().split('T')[0];
       const { error } = await supabase
         .from('time_entries')
         .insert({
           activity_id: activityId,
+          user_id: userId,  // ← теперь userId определен
           duration,
           date: today,
           note: 'Быстрое добавление',
@@ -89,45 +99,6 @@ export default function DashboardPage() {
     } catch (error) {
       console.error('Error adding time entry:', error);
       alert('Не удалось добавить запись');
-    }
-  };
-
-  const createActivity = async (name: string, icon: string, color: number) => {
-    try {
-      const { error } = await supabase
-        .from('activities')
-        .insert({
-          name,
-          icon,
-          color,
-          is_active: true,
-        });
-
-      if (error) throw error;
-      
-      fetchData(); // Обновляем данные
-      return true;
-    } catch (error) {
-      console.error('Error creating activity:', error);
-      alert('Не удалось создать активность');
-      return false;
-    }
-  };
-
-  const deleteActivity = async (id: string) => {
-    if (!confirm('Удалить активность?')) return;
-    try {
-      const { error } = await supabase
-        .from('activities')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      fetchData();
-    } catch (error) {
-      console.error('Error deleting activity:', error);
-      alert('Не удалось удалить активность');
     }
   };
 
